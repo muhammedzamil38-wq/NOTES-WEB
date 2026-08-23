@@ -31,7 +31,10 @@ const GenerateOTP = () => {
       } else toast.error(response.data.message);
     } catch (error) {
       console.log(error);
-      toast.error(error.message);
+      toast.error(
+        error.response?.data?.message ||
+          "Unable to generate OTP. Check the backend deployment and email configuration.",
+      );
     }
   };
   return (

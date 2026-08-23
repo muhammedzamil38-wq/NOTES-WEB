@@ -3,6 +3,7 @@ import { notesContext } from "../context/NotesContext";
 import Title from "../components/Title";
 import { Trash2, X } from "lucide-react";
 import axios from "axios";
+import { toast } from "react-toastify";
 const CompletedNotes = () => {
   const [notes, setNotes] = useState([]);
   const { backendurl, getNotes } = useContext(notesContext);
@@ -39,6 +40,7 @@ const CompletedNotes = () => {
           (note._id || note.id) === noteId ? { ...note, completed: false } : note,
         ),
       );
+      toast.success("Note marked as not completed");
     } catch (error) {
       console.error("Error not completing note:", error);
     }
@@ -65,6 +67,7 @@ const CompletedNotes = () => {
       setNotes((currentNotes) =>
         currentNotes.filter((note) => (note._id || note.id) !== noteId),
       );
+      toast.success("Note deleted successfully");
     } catch (error) {
       console.error("Error deleting note:", error);
     }
@@ -95,7 +98,7 @@ const CompletedNotes = () => {
                 </div>
                 <div className="flex w-full  gap-2 items-center justify-center">
                   <button
-                    onClick={() => deleteNoteHandler(note._id || note.id)}
+                    onClick={() => deleteNoteHandler(note._id || note.id,)}
                     className="bg-white/10 rounded-3xl w-full py-2 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 hover:bg-white/30 transition duration-300"
                   >
                     <Trash2 />

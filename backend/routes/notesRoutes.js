@@ -5,7 +5,7 @@ import authUser from '../middlewares/auth.js';
 
 const notesRouter = express.Router();
 notesRouter.post('/create-note',authUser,addNotes)
-notesRouter.post('/update-note',authUser,updateNote)
+notesRouter.put('/update-note',authUser,updateNote)
 notesRouter.post('/delete-note',authUser,deleteNotes)
 notesRouter.post('/completed-note',authUser,completeNote)
 notesRouter.post('/incompleted-note',authUser,notCompleteNote)

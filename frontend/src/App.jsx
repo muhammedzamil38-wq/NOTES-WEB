@@ -42,9 +42,11 @@ const AddNote = React.lazy(
 );
 const Profile = React.lazy(
   () =>
-    new Promise((resolve) =>
-      setTimeout(() => resolve(import("./pages/Profile")), 1000),
-    ),
+    new Promise((resolve) => setTimeout(() => resolve(import("./pages/Profile")), 1000)),
+);
+const EditNote = React.lazy(
+  () =>
+    new Promise((resolve) => setTimeout(() => resolve(import("./pages/EditNote")), 1000)),
 );
 
 const App = () => {
@@ -58,11 +60,22 @@ const App = () => {
         <Routes>
           <Route
             path="/"
-            element={token ? <Navigate to="/notes" replace /> : <Navigate to="/login" replace />}
+            element={
+              token ? <Navigate to="/notes" replace /> : <Navigate to="/login" replace />
+            }
           />
-          <Route path="/profile" element={token ? <Profile /> : <Navigate to="/login" replace />} />
-          <Route path="/login" element={token ? <Navigate to="/notes" replace /> : <Login />} />
-          <Route path="/notes" element={token ? <DisplayNotes /> : <Navigate to="/login" replace />} />
+          <Route
+            path="/profile"
+            element={token ? <Profile /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/login"
+            element={token ? <Navigate to="/notes" replace /> : <Login />}
+          />
+          <Route
+            path="/notes"
+            element={token ? <DisplayNotes /> : <Navigate to="/login" replace />}
+          />
           <Route
             path="/completed-notes"
             element={token ? <CompletedNotes /> : <Navigate to="/login" replace />}
@@ -71,9 +84,16 @@ const App = () => {
             path="/add-notes"
             element={token ? <AddNote /> : <Navigate to="/login" replace />}
           />
+          <Route
+            path="/edit-notes"
+            element={token ? <EditNote /> : <Navigate to="/login" replace />}
+          />
           <Route path="/generate-otp" element={<GenerateOtp />} />
           <Route path="/verify-otp" element={<VerifyOtp />} />
-          <Route path="*" element={<Navigate to={token ? "/notes" : "/login"} replace />} />
+          <Route
+            path="*"
+            element={<Navigate to={token ? "/notes" : "/login"} replace />}
+          />
         </Routes>
       </Suspense>
     </div>

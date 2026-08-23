@@ -1,8 +1,9 @@
 import { useContext, useEffect, useState } from "react";
 import { notesContext } from "../context/NotesContext";
 import Title from "../components/Title";
-import { Plus, Check, Trash2 } from "lucide-react";
+import { Plus, Check, Trash2, Pencil } from "lucide-react";
 import axios from "axios";
+import { toast } from "react-toastify";
 
 const DisplayNotes = () => {
   const { navigate, backendurl, getNotes } = useContext(notesContext);
@@ -47,10 +48,20 @@ const DisplayNotes = () => {
       setNotes((currentNotes) =>
         currentNotes.filter((note) => (note._id || note.id) !== noteId),
       );
+      toast.success("Note deleted successfully");
     } catch (error) {
       console.error("Error deleting note:", error);
     }
   };
+  const editNoteHandler = async(noteId, title, description,isCompleted)=>{
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+    try{
+      navigate("/edit-notes", { state: { noteId, title, description, isCompleted } });
+    }catch(error){
+      console.error("Error editing note:", error);
+    }
+  }
   const completeNoteHandler = async (noteId) => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
@@ -75,6 +86,7 @@ const DisplayNotes = () => {
             : note,
         ),
       );
+      toast.success("Note marked as completed");
     } catch (error) {
       console.error("Error completing note:", error);
     }
@@ -116,6 +128,12 @@ const DisplayNotes = () => {
                     className="bg-white/10 rounded-3xl w-full py-2 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 hover:bg-white/30 transition duration-300"
                   >
                     <Trash2 />
+                  </button>
+                  <button
+                    onClick={() => editNoteHandler(note._id || note.id,note.title,note.description,note.completed)}
+                    className="bg-white/10 rounded-3xl w-full py-2 flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 hover:bg-white/30 transition duration-300"
+                  >
+                    <Pencil />
                   </button>
                   <button
                     onClick={() => completeNoteHandler(note._id || note.id)}

@@ -30,6 +30,39 @@ const isPasswordMatch = async (enteredPassword, storedPassword) => {
   return storedPassword === enteredPassword;
 };
 
+const createRegistrationToken = (registration) => {
+  const iv = crypto.randomBytes(12);
+  const key = crypto.createHash("sha256").update(process.env.JWT_SECRET).digest();
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(JSON.stringify(registration), "utf8"),
+    cipher.final(),
+  ]);
+
+  return [iv, cipher.getAuthTag(), encrypted]
+    .map((part) => part.toString("base64url"))
+    .join(".");
+};
+
+const readRegistrationToken = (registrationToken) => {
+  const [encodedIv, encodedTag, encodedData] = registrationToken.split(".");
+  if (!encodedIv || !encodedTag || !encodedData) return null;
+
+  const key = crypto.createHash("sha256").update(process.env.JWT_SECRET).digest();
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(encodedIv, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(encodedTag, "base64url"));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(encodedData, "base64url")),
+    decipher.final(),
+  ]);
+
+  return JSON.parse(decrypted.toString("utf8"));
+};
+
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -60,9 +93,9 @@ const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
 
-    const exist = await userModel.findOne({ email });
-
-    if (exist) return res.json({ success: false, message: "User already exists" });
+    if (!name?.trim() || !email?.trim() || !password) {
+      return res.json({ success: false, message: "Name, email, and password are required" });
+    }
 
     if (!validator.isEmail(email)) {
       return res.json({ success: false, message: "Invalid email format" });
@@ -71,19 +104,26 @@ const registerUser = async (req, res) => {
     if (password.length < 8) {
       return res.json({ success: false, message: "Please enter a strong Password" });
     }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const exist = await userModel.findOne({ email: normalizedEmail });
+
+    if (exist) return res.json({ success: false, message: "User already exists" });
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newUser = await new userModel({
-      name,
-      email,
+    const registrationToken = createRegistrationToken({
+      name: name.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
+      expiresAt: Date.now() + 30 * 60 * 1000,
     });
 
-    const user = await newUser.save();
-    const token = createToken(user._id);
-
-    res.json({ success: true, token, userId: user._id });
+    return res.json({
+      success: true,
+      message: "Registration details ready. Generate an OTP to continue.",
+      registrationToken,
+    });
   } catch (error) {
     console.log(error);
     res.json({ success: false, message: error.message });
@@ -91,7 +131,36 @@ const registerUser = async (req, res) => {
 };
 const generateOtp = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, registrationToken } = req.body;
+
+    if (registrationToken) {
+      let registration;
+      try {
+        registration = readRegistrationToken(registrationToken);
+      } catch {
+        return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
+      }
+
+      if (
+        !registration ||
+        registration.email !== String(email || "").trim().toLowerCase() ||
+        registration.expiresAt < Date.now()
+      ) {
+        return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
+      }
+
+      const otp = crypto.randomInt(100000, 1000000).toString();
+      registration.otp = otp;
+      registration.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+      await sendOtp(registration.email, otp);
+
+      return res.json({
+        success: true,
+        message: "OTP sent successfully",
+        registrationToken: createRegistrationToken(registration),
+      });
+    }
+
     const user = await userModel.findOne({ email });
 
     if (!user) {
@@ -112,14 +181,53 @@ const generateOtp = async (req, res) => {
 };
 const verifyOtp = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp, registrationToken } = req.body;
+
+    if (registrationToken) {
+      let registration;
+      try {
+        registration = readRegistrationToken(registrationToken);
+      } catch {
+        return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
+      }
+
+      if (
+        !registration ||
+        registration.email !== String(email || "").trim().toLowerCase() ||
+        registration.otp !== otp ||
+        registration.expiresAt < Date.now() ||
+        !registration.otpExpiresAt ||
+        registration.otpExpiresAt < Date.now()
+      ) {
+        return res.json({ success: false, message: "Invalid or expired otp" });
+      }
+
+      const existingUser = await userModel.findOne({ email: registration.email });
+      if (existingUser) {
+        return res.json({ success: false, message: "User already exists" });
+      }
+
+      const registeredUser = await userModel.create({
+        name: registration.name,
+        email: registration.email,
+        password: registration.password,
+      });
+      const token = createToken(registeredUser._id);
+      return res.json({
+        success: true,
+        message: "Otp verified successfully",
+        token,
+        userId: registeredUser._id,
+      });
+    }
+
     const user = await userModel.findOne({ email });
 
     if (!user) {
       return res.json({ success: false, message: "User not found" });
     }
 
-    if (user.otp !== otp || user.otpExpire < Date.now()) {
+    if (!user.otp || user.otp !== otp || !user.otpExpire || user.otpExpire < Date.now()) {
       return res.json({ success: false, message: "Invalid or expired otp" });
     }
 
@@ -128,7 +236,7 @@ const verifyOtp = async (req, res) => {
     await user.save();
 
     const token = createToken(user._id);
-    res.json({ success: true, message: "Otp verified successfully", token, userId: user._id });
+    return res.json({ success: true, message: "Otp verified successfully", token, userId: user._id });
   } catch (error) {
     console.log(error);
     res.json({ success: false, message: error.message });

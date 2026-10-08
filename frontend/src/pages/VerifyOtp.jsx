@@ -10,15 +10,17 @@ const VerifyOTP = () => {
   const [otp, setOtp] = useState("");
   const { navigate, backendurl, setToken } = useContext(notesContext);
   const location = useLocation();
-  let email = location.state?.email;
-  let name = location.state?.name;
+  const email = location.state?.email;
+  const name = location.state?.name;
+  const registrationToken = location.state?.registrationToken;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const response = await axios.post(backendurl + "/api/user/verify-otp", {
         email,
-        otp:otp.trim(),
+        otp: otp.trim(),
+        registrationToken,
       });
       if (response.data.success) {
         toast.success(response.data.message);

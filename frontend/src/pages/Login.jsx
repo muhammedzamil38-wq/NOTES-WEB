@@ -46,7 +46,13 @@ const Login = () => {
           password,
         });
         if (response.data.success) {
-          navigate("/generate-otp", { state: { email } });
+          navigate("/generate-otp", {
+            state: {
+              email,
+              name,
+              registrationToken: response.data.registrationToken,
+            },
+          });
         } else {
           toast.error(response.data.message);
         }

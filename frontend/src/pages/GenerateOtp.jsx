@@ -24,10 +24,17 @@ const GenerateOTP = () => {
     try {
       const response = await axios.post(backendurl + "/api/user/generate-otp", {
         email,
+        registrationToken: location.state?.registrationToken,
       });
       if (response.data.success) {
         toast.success(response.data.message);
-        navigate("/verify-otp", { state: { email, name: location.state.name } });
+        navigate("/verify-otp", {
+          state: {
+            email,
+            name: location.state?.name,
+            registrationToken: response.data.registrationToken,
+          },
+        });
       } else toast.error(response.data.message);
     } catch (error) {
       console.log(error);
@@ -50,6 +57,7 @@ const GenerateOTP = () => {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          readOnly={Boolean(location.state?.registrationToken)}
           required
         />
         <button

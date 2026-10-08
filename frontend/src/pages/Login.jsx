@@ -62,11 +62,8 @@ const Login = () => {
           password
         });
         if (response.data.success) {
-          const token = response.data.token;
-          const userId = response.data.userId;
-
           navigate("/generate-otp", {
-            state: { email, token, userId, name },
+            state: { email, name, loginToken: response.data.loginToken },
           });
         } else {
           toast.error(response.data.message);

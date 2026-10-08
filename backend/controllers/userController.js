@@ -30,12 +30,12 @@ const isPasswordMatch = async (enteredPassword, storedPassword) => {
   return storedPassword === enteredPassword;
 };
 
-const createRegistrationToken = (registration) => {
+const createOtpChallengeToken = (challenge) => {
   const iv = crypto.randomBytes(12);
   const key = crypto.createHash("sha256").update(process.env.JWT_SECRET).digest();
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(registration), "utf8"),
+    cipher.update(JSON.stringify(challenge), "utf8"),
     cipher.final(),
   ]);
 
@@ -44,8 +44,8 @@ const createRegistrationToken = (registration) => {
     .join(".");
 };
 
-const readRegistrationToken = (registrationToken) => {
-  const [encodedIv, encodedTag, encodedData] = registrationToken.split(".");
+const readOtpChallengeToken = (challengeToken) => {
+  const [encodedIv, encodedTag, encodedData] = challengeToken.split(".");
   if (!encodedIv || !encodedTag || !encodedData) return null;
 
   const key = crypto.createHash("sha256").update(process.env.JWT_SECRET).digest();
@@ -78,8 +78,17 @@ const loginUser = async (req, res) => {
 
     const isMatch = await isPasswordMatch(password, user.password);
     if (isMatch) {
-      const token = createToken(user._id);
-      return res.json({ success: true, token, userId: user._id });
+      const loginToken = createOtpChallengeToken({
+        purpose: "login",
+        userId: user._id.toString(),
+        email: user.email,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      });
+      return res.json({
+        success: true,
+        message: "Password verified. Generate an OTP to continue.",
+        loginToken,
+      });
     } else {
       return res.json({ success: false, message: "Invalid password" });
     }
@@ -112,7 +121,8 @@ const registerUser = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const registrationToken = createRegistrationToken({
+    const registrationToken = createOtpChallengeToken({
+      purpose: "registration",
       name: name.trim(),
       email: normalizedEmail,
       password: hashedPassword,
@@ -131,49 +141,59 @@ const registerUser = async (req, res) => {
 };
 const generateOtp = async (req, res) => {
   try {
-    const { email, registrationToken } = req.body;
+    const { email, registrationToken, loginToken } = req.body;
+    const challengeToken = registrationToken || loginToken;
 
-    if (registrationToken) {
-      let registration;
+    if (challengeToken) {
+      let challenge;
       try {
-        registration = readRegistrationToken(registrationToken);
+        challenge = readOtpChallengeToken(challengeToken);
       } catch {
-        return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
+        return res.json({ success: false, message: "Authentication challenge expired or invalid. Please start again." });
       }
 
       if (
-        !registration ||
-        registration.email !== String(email || "").trim().toLowerCase() ||
-        registration.expiresAt < Date.now()
+        !challenge ||
+        challenge.email !== String(email || "").trim().toLowerCase() ||
+        challenge.expiresAt < Date.now() ||
+        (registrationToken && challenge.purpose !== "registration") ||
+        (loginToken && challenge.purpose !== "login")
       ) {
-        return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
+        return res.json({ success: false, message: "Authentication challenge expired or invalid. Please start again." });
       }
 
       const otp = crypto.randomInt(100000, 1000000).toString();
-      registration.otp = otp;
-      registration.otpExpiresAt = Date.now() + 10 * 60 * 1000;
-      await sendOtp(registration.email, otp);
+
+      if (challenge.purpose === "registration") {
+        challenge.otp = otp;
+        challenge.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+        await sendOtp(challenge.email, otp);
+
+        return res.json({
+          success: true,
+          message: "OTP sent successfully",
+          registrationToken: createOtpChallengeToken(challenge),
+        });
+      }
+
+      const user = await userModel.findOne({ _id: challenge.userId, email: challenge.email });
+      if (!user) {
+        return res.json({ success: false, message: "User not found" });
+      }
+
+      user.otp = otp;
+      user.otpExpire = new Date(Date.now() + 10 * 60 * 1000);
+      await user.save();
+      await sendOtp(user.email, otp);
 
       return res.json({
         success: true,
         message: "OTP sent successfully",
-        registrationToken: createRegistrationToken(registration),
+        loginToken: createOtpChallengeToken(challenge),
       });
     }
 
-    const user = await userModel.findOne({ email });
-
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
-    }
-
-    const otp = crypto.randomInt(100000, 999999).toString();
-    user.otp = otp;
-    user.otpExpire = new Date(Date.now() + 10 * 60 * 1000);
-    await user.save();
-
-    await sendOtp(email, otp);
-    res.json({ success: true, message: "OTP send successfully" });
+    return res.json({ success: false, message: "Authentication challenge required" });
   } catch (error) {
     console.log(error);
     res.json({ success: false, message: error.message });
@@ -181,18 +201,19 @@ const generateOtp = async (req, res) => {
 };
 const verifyOtp = async (req, res) => {
   try {
-    const { email, otp, registrationToken } = req.body;
+    const { email, otp, registrationToken, loginToken } = req.body;
 
     if (registrationToken) {
       let registration;
       try {
-        registration = readRegistrationToken(registrationToken);
+        registration = readOtpChallengeToken(registrationToken);
       } catch {
         return res.json({ success: false, message: "Registration expired or invalid. Please sign up again." });
       }
 
       if (
         !registration ||
+        registration.purpose !== "registration" ||
         registration.email !== String(email || "").trim().toLowerCase() ||
         registration.otp !== otp ||
         registration.expiresAt < Date.now() ||
@@ -221,22 +242,41 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    const user = await userModel.findOne({ email });
+    if (loginToken) {
+      let challenge;
+      try {
+        challenge = readOtpChallengeToken(loginToken);
+      } catch {
+        return res.json({ success: false, message: "Login challenge expired or invalid. Please sign in again." });
+      }
 
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
+      if (
+        !challenge ||
+        challenge.purpose !== "login" ||
+        challenge.email !== String(email || "").trim().toLowerCase() ||
+        challenge.expiresAt < Date.now()
+      ) {
+        return res.json({ success: false, message: "Login challenge expired or invalid. Please sign in again." });
+      }
+
+      const user = await userModel.findOne({ _id: challenge.userId, email: challenge.email });
+      if (!user) {
+        return res.json({ success: false, message: "User not found" });
+      }
+
+      if (!user.otp || user.otp !== otp || !user.otpExpire || user.otpExpire < Date.now()) {
+        return res.json({ success: false, message: "Invalid or expired otp" });
+      }
+
+      user.otp = null;
+      user.otpExpire = null;
+      await user.save();
+
+      const token = createToken(user._id);
+      return res.json({ success: true, message: "Otp verified successfully", token, userId: user._id });
     }
 
-    if (!user.otp || user.otp !== otp || !user.otpExpire || user.otpExpire < Date.now()) {
-      return res.json({ success: false, message: "Invalid or expired otp" });
-    }
-
-    user.otp = null;
-    user.otpExpire = null;
-    await user.save();
-
-    const token = createToken(user._id);
-    return res.json({ success: true, message: "Otp verified successfully", token, userId: user._id });
+    return res.json({ success: false, message: "Authentication challenge required" });
   } catch (error) {
     console.log(error);
     res.json({ success: false, message: error.message });

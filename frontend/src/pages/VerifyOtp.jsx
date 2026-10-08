@@ -13,6 +13,7 @@ const VerifyOTP = () => {
   const email = location.state?.email;
   const name = location.state?.name;
   const registrationToken = location.state?.registrationToken;
+  const loginToken = location.state?.loginToken;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,6 +22,7 @@ const VerifyOTP = () => {
         email,
         otp: otp.trim(),
         registrationToken,
+        loginToken,
       });
       if (response.data.success) {
         toast.success(response.data.message);

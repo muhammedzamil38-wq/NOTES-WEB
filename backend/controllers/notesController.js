@@ -93,7 +93,7 @@ const updateNote = async (req, res) => {
     const updatedUser = await userModel.findOneAndUpdate(
       { _id: id, "notes._id": noteId },
       { $set: updateFields },
-      { new: true, runValidators: true },
+      { after: true, runValidators: true },
     );
 
     if (!updatedUser) {

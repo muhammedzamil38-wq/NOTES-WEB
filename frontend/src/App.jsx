@@ -7,6 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { useContext } from "react";
 import { notesContext } from "./context/NotesContext";
 import Navbar from "./components/Navbar";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const DisplayNotes = React.lazy(
   () =>
@@ -79,6 +80,10 @@ const App = () => {
           <Route
             path="/completed-notes"
             element={token ? <CompletedNotes /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/privacy-policy"
+            element={<PrivacyPolicy />}
           />
           <Route
             path="/add-notes"

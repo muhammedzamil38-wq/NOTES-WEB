@@ -1,4 +1,5 @@
 import  { useContext, useState } from "react";
+import { Link } from "react-router-dom";
 import { notesContext } from "../context/NotesContext";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -134,6 +135,12 @@ const Login = () => {
       <button className="cursor-pointer bg-black text-white font-light px-8 py-2 mt-4 ">
         {currentState === "Login" ? "Sign In" : "Sign Up"}
       </button>
+      <Link
+        to="/privacy-policy"
+        className="mb-4 text-xs text-gray-600 underline underline-offset-2 hover:text-gray-900"
+      >
+        Privacy Policy
+      </Link>
     </form>
   );
 };

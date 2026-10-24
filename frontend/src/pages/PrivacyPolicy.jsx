@@ -91,12 +91,6 @@ const PrivacyPolicy = () => {
             </section>
           ))}
         </div>
-
-        <p className="mt-8 border-t border-[#1C1B1F]/10 pt-5 text-xs leading-5 text-gray-500">
-          This policy is general information and is not legal advice. Before
-          publishing, make sure it reflects your actual providers, practices,
-          and the laws that apply to your service.
-        </p>
       </article>
     </main>
   );
